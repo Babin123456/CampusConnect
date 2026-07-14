@@ -93,6 +93,7 @@ export function Navbar() {
 function NotificationBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const notifications: string[] = [];
 
   useEffect(() => {
@@ -103,9 +104,24 @@ function NotificationBell() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
+
   return (
     <div ref={ref} className="relative">
       <button
+        ref={buttonRef}
         onClick={() => setOpen((o) => !o)}
         className="relative flex h-8 w-8 items-center justify-center rounded-full border-2 border-black bg-white transition-colors hover:bg-lime focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
         aria-label="Notifications"
@@ -143,7 +159,7 @@ function NotificationBell() {
           ) : (
             <ul className="divide-y-2 divide-black">
               {notifications.map((n, i) => (
-                <li key={i} className="px-4 py-3 font-mono text-sm">
+                <li key={i} role="menuitem" className="px-4 py-3 font-mono text-sm">
                   {n}
                 </li>
               ))}
