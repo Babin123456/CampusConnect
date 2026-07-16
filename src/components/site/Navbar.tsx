@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import { ThemeToggle } from "../ThemeToggle";
+
 import { NavbarNotificationDropdown } from "./NavbarNotificationDropdown";
+
 import { Menu, X } from "lucide-react";
 
 const links = [
@@ -44,7 +46,10 @@ export function Navbar() {
         </Link>
         <nav aria-label="Main navigation" className="hidden items-center gap-6 md:flex">
           {links.map((l) => {
-            const isActive = currentPath === l.to || currentPath.startsWith(l.to + "/");
+            const isActive =
+              (l.to as string) === "/"
+                ? currentPath === "/"
+                : currentPath === l.to || currentPath.startsWith(l.to + "/");
 
             return (
               <Link
@@ -66,6 +71,7 @@ export function Navbar() {
           <div className="flex items-center gap-1.5 sm:gap-2">
             <ThemeToggle />
             {user && <NavbarNotificationDropdown />}
+
             {user ? (
               <Link
                 to="/dashboard"
@@ -107,7 +113,10 @@ export function Navbar() {
         <nav className="border-t-2 border-black bg-cream p-4 dark:border-cream dark:bg-black md:hidden">
           <div className="flex flex-col gap-2">
             {links.map((l) => {
-              const isActive = currentPath === l.to || currentPath.startsWith(l.to + "/");
+              const isActive =
+                (l.to as string) === "/"
+                  ? currentPath === "/"
+                  : currentPath === l.to || currentPath.startsWith(l.to + "/");
 
               return (
                 <Link
