@@ -6,6 +6,8 @@ import { SiteShell } from "@/components/site/SiteShell";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { Plus, UsersRound, X } from "lucide-react";
+import type { User } from "@supabase/supabase-js";
+import { CreateClubDialog } from "@/components/CreateClubDialog";
 
 export const Route = createFileRoute("/clubs/")({
   head: () => ({
@@ -27,6 +29,11 @@ function ClubsIndex() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
+  }, [supabase]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -70,42 +77,39 @@ function ClubsIndex() {
       (c.description || "").toLowerCase().includes(search.toLowerCase()),
   );
 
-  const handleCreateClub = () => {
-    window.alert("Club creation is coming soon!");
-  };
-
   return (
     <SiteShell>
       <section className="border-b-2 border-black bg-lavender px-4 py-14 md:px-6">
-        <div className="mx-auto max-w-7xl">
-          <p className="eyebrow font-bold">Club directory · {totalActiveCount} active</p>
-          <h1 className="mt-2 text-4xl font-bold md:text-6xl">Find your people.</h1>
-
-          <p className="eyebrow font-bold">Club directory · {clubs.length} active</p>
-          <h1 className="mt-2 text-3xl font-bold sm:text-4xl md:text-6xl">Find your people.</h1>
-
-          <div className="relative mt-6 max-w-xl">
-            <input
-              ref={inputRef}
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search clubs by name or interest..."
-              className="neu-border w-full bg-white px-4 py-3 pr-10 font-mono text-sm outline-none"
-            />
-            {searchInput && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchInput("");
-                  setSearch("");
-                  inputRef.current?.focus();
-                }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-black"
-                aria-label="Clear search"
-              >
-                <X size={18} />
-              </button>
-            )}
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="flex-1">
+            <p className="eyebrow font-bold">Club directory · {totalActiveCount} active</p>
+            <h1 className="mt-2 text-3xl font-bold sm:text-4xl md:text-6xl">Find your people.</h1>
+            <div className="relative mt-6 max-w-xl">
+              <input
+                ref={inputRef}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search clubs by name or interest..."
+                className="neu-border w-full bg-white px-4 py-3 pr-10 font-mono text-sm outline-none"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchInput("");
+                    setSearch("");
+                    inputRef.current?.focus();
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-black"
+                  aria-label="Clear search"
+                >
+                  <X size={18} />
+                </button>
+              )}
+            </div>
+          </div>
+          <div>
+            <CreateClubDialog user={user} />
           </div>
         </div>
       </section>
@@ -138,14 +142,9 @@ function ClubsIndex() {
                   There are no clubs in the directory yet. Create the first club and bring students
                   with shared interests together.
                 </p>
-                <button
-                  type="button"
-                  onClick={handleCreateClub}
-                  className="neu-border neu-press mt-7 inline-flex items-center gap-2 bg-sky px-5 py-3 font-mono text-sm font-bold uppercase"
-                >
-                  <Plus size={18} aria-hidden="true" />
-                  Create a Club
-                </button>
+                <div className="mt-7">
+                  <CreateClubDialog user={user} />
+                </div>
               </div>
             ) : (
               filteredClubs.map((c, index) => {
