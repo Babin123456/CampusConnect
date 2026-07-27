@@ -655,6 +655,7 @@ function SettingsPageContent({ user }: WithAuthProps) {
           </Panel>
         </div>
       </section>
+      <SecuritySection />
     </SiteShell>
   );
 }
