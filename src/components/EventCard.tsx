@@ -1,4 +1,10 @@
-import { formatDate, formatEventDateRange, getCountdown, getGoogleCalendarUrl, getIcsContent } from "@/lib/utils";
+import {
+  formatDate,
+  formatEventDateRange,
+  getCountdown,
+  getGoogleCalendarUrl,
+  getIcsContent,
+} from "@/lib/utils";
 import { Link } from "react-router-dom";
 import React, { FormEvent, useState, useMemo, useEffect, useRef } from "react";
 import { Calendar, Check, Share2, X, Link as LinkIcon, Bookmark } from "lucide-react";
@@ -143,7 +149,6 @@ function renderLocationWithLinks(locationText: string | null) {
     return part;
   });
 }
-
 export function EventCard({
   event,
   index,
@@ -171,8 +176,12 @@ export function EventCard({
 
   const [ticketOpen, setTicketOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const shouldTruncate = !!event.description && event.description.length > 220;
 
+  const displayedDescription =
+    shouldTruncate && !isDescriptionExpanded
+      ? `${event.description!.slice(0, 180)}...`
+      : event.description;
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
@@ -201,7 +210,7 @@ export function EventCard({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `${event.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.ics`);
+    link.setAttribute("download", `${event.title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.ics`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -305,25 +314,10 @@ export function EventCard({
         <p className="mt-1 font-mono text-sm font-bold text-blue-900">{club?.name}</p>
 
         {event.description ? (
-          <div
-            className={`mt-4 overflow-hidden transition-all duration-300 ease-in-out ${
-              isDescriptionExpanded ? "max-h-250" : "max-h-40"
-            }`}
-          >
-            <p className="text-sm leading-6 text-gray-800 inline">{displayedDescription}</p>
-
-            {shouldTruncate && (
-              <button
-                type="button"
-                onClick={() => setIsDescriptionExpanded((prev) => !prev)}
-                className="ml-1 inline font-semibold text-violet-700 hover:text-violet-900 transition-colors"
-              >
-                {isDescriptionExpanded ? "Read less" : "Read more"}
-              </button>
-            )}
+          <div className="mt-4">
+            <ReadMore text={event.description} />
           </div>
         ) : null}
-
         <EventProgressBar createdAt={event.created_at} eventDate={event.event_date} />
 
         <div className="mt-4">
