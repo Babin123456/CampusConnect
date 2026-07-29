@@ -114,6 +114,29 @@ export function Navbar() {
     setMobileMenuOpen(false);
   }, [location.pathname]);
 
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    let ticking = false;
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          setIsScrolled(window.scrollY > 100);
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    // Check initial scroll position
+    setIsScrolled(window.scrollY > 100);
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
 
@@ -126,12 +149,20 @@ export function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b-2 border-black bg-white text-black dark:border-cream dark:bg-black dark:text-cream">
-      <div className="mx-auto flex min-w-0 max-w-7xl items-center justify-between gap-2 px-2 py-3 sm:px-4 md:px-6">
+    <header
+      className={`sticky top-0 z-40 border-b-2 border-black bg-white text-black transition-all duration-300 dark:border-cream dark:bg-black dark:text-cream ${
+        isScrolled ? "h-14 py-1" : "h-20 py-3"
+      }`}
+    >
+      <div className="mx-auto flex h-full min-w-0 max-w-7xl items-center justify-between gap-2 px-2 sm:px-4 md:px-6">
         {/* Logo */}
         <Link
           to="/"
-          className="min-w-0 flex-1 truncate font-display text-sm font-bold sm:flex-none sm:text-xl md:text-2xl navbar-logo"
+          className={`min-w-0 flex-1 truncate font-display font-bold sm:flex-none navbar-logo transition-all duration-300 ${
+            isScrolled
+              ? "text-xs sm:text-lg md:text-xl scale-90 sm:scale-95 origin-left"
+              : "text-sm sm:text-xl md:text-2xl scale-100"
+          }`}
         >
           <span style={{ letterSpacing: "0.04em" }}>CAMPUS</span>
           <span className="bg-black px-1 text-cream dark:bg-cream dark:text-black">CONNECT</span>
