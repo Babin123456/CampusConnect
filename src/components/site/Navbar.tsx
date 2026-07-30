@@ -1,13 +1,16 @@
 import { getPresenceBadgeClass, usePresence } from "@/hooks/usePresence";
 import { createClient } from "@/lib/supabase/client";
-import type { User } from "@supabase/supabase-js";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { localizedPath } from "@/lib/i18n";
 
 import { ThemeToggle } from "../ThemeToggle";
 import { NavbarNotificationDropdown } from "./NavbarNotificationDropdown";
 
 import { Menu, X } from "lucide-react";
+import { useAuthHydration } from "@/hooks/useAuthHydration";
+import { ProfileHeaderSkeleton } from "@/components/ProfileHeaderSkeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,30 +20,86 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const links = [
-  { to: "/events", label: "Events" },
-  { to: "/clubs", label: "Clubs" },
-  { to: "/feed", label: "Feed" },
-  { to: "/challenge", label: "Challenge" },
-  { to: "/certificates", label: "Certificates" },
-  { to: "/dashboard", label: "Dashboard" },
-  { to: "/messages", label: "Messages" },
-] as const;
-const landingLinks = [
-  { href: "#features", label: "Features" },
-  { href: "#faq", label: "FAQ" },
-  { href: "#contact", label: "Contact" },
-] as const;
-
 export function Navbar() {
+  const { user, isInitializing } = useAuthHydration();
   const location = useLocation();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+  const links = [
+    {
+      to: localizedPath(i18n.language, "/events"),
+      label: t("navbar.events"),
+    },
+    {
+      to: localizedPath(i18n.language, "/clubs"),
+      label: t("navbar.clubs"),
+    },
+    {
+      to: localizedPath(i18n.language, "/feed"),
+      label: t("navbar.feed"),
+    },
+    {
+      to: localizedPath(i18n.language, "/directory"),
+      label: t("navbar.directory"),
+    },
+    {
+      to: localizedPath(i18n.language, "/challenge"),
+      label: t("navbar.challenge"),
+    },
+    {
+      to: localizedPath(i18n.language, "/certificates"),
+      label: t("navbar.certificates"),
+    },
+    {
+      to: localizedPath(i18n.language, "/dashboard"),
+      label: t("navbar.dashboard"),
+    },
+    {
+      to: localizedPath(i18n.language, "/messages"),
+      label: t("navbar.messages"),
+    },
+  ];
+
+  const landingLinks = [
+    { href: "#features", label: t("navbar.features") },
+    { href: "#faq", label: t("navbar.faq") },
+    { href: "#contact", label: t("navbar.contact") },
+  ];
   const currentPath = location.pathname;
   const supabase = createClient();
 
-  const [user, setUser] = useState<User | null>(null);
   const { onlineUsers } = usePresence(user?.id);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // ── Sticky-header shrink-on-scroll state ─────────────────────────────────
+  // When the user has scrolled more than 100 px, isScrolled becomes true.
+  // A throttled requestAnimationFrame handler keeps the scroll listener
+  // cheap on the main thread (passive + rAF = one state update per frame max).
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    // Read initial position immediately (handles hard refresh mid-page)
+    setIsScrolled(window.scrollY > 100);
+
+    let ticking = false;
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          setIsScrolled(window.scrollY > 100);
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    // passive: true — never calls preventDefault, so the browser can
+    // optimise scroll performance without waiting for JS to respond.
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+  // ─────────────────────────────────────────────────────────────────────────
 
   const hamburgerRef = useRef<HTMLButtonElement>(null);
   const navRef = useRef<HTMLElement>(null);
@@ -97,45 +156,8 @@ export function Navbar() {
   }, [mobileMenuOpen]);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
     setMobileMenuOpen(false);
   }, [location.pathname]);
-
-  const [isScrolled, setIsScrolled] = useState(false);
-
-  useEffect(() => {
-    let ticking = false;
-    const handleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          setIsScrolled(window.scrollY > 100);
-          ticking = false;
-        });
-        ticking = true;
-      }
-    };
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    // Check initial scroll position
-    setIsScrolled(window.scrollY > 100);
-
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-    };
-  }, []);
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
@@ -150,19 +172,22 @@ export function Navbar() {
 
   return (
     <header
-      className={`sticky top-0 z-40 border-b-2 border-black bg-white text-black transition-all duration-300 dark:border-cream dark:bg-black dark:text-cream ${
-        isScrolled ? "h-14 py-1" : "h-20 py-3"
-      }`}
+      data-scrolled={isScrolled}
+      className={`sticky top-0 z-40 border-b-2 border-black bg-white text-black
+        transition-all duration-300 ease-in-out
+        dark:border-cream dark:bg-black dark:text-cream
+        ${isScrolled ? "h-14" : "h-20"}`}
     >
       <div className="mx-auto flex h-full min-w-0 max-w-7xl items-center justify-between gap-2 px-2 sm:px-4 md:px-6">
-        {/* Logo */}
+        {/* Logo – scales down by ~20 % when the header shrinks */}
         <Link
-          to="/"
-          className={`min-w-0 flex-1 truncate font-display font-bold sm:flex-none navbar-logo transition-all duration-300 ${
-            isScrolled
-              ? "text-xs sm:text-lg md:text-xl scale-90 sm:scale-95 origin-left"
+          to={localizedPath(i18n.language, "/")}
+          className={`min-w-0 flex-1 truncate font-display font-bold sm:flex-none navbar-logo
+            transition-all duration-300 ease-in-out origin-left
+            ${isScrolled
+              ? "text-sm sm:text-lg md:text-xl scale-[0.80]"
               : "text-sm sm:text-xl md:text-2xl scale-100"
-          }`}
+            }`}
         >
           <span style={{ letterSpacing: "0.04em" }}>CAMPUS</span>
           <span className="bg-black px-1 text-cream dark:bg-cream dark:text-black">CONNECT</span>
@@ -213,7 +238,9 @@ export function Navbar() {
             <ThemeToggle />
 
             {user && <NavbarNotificationDropdown />}
-            {user ? (
+            {isInitializing ? (
+              <ProfileHeaderSkeleton />
+            ) : user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -257,12 +284,12 @@ export function Navbar() {
               </DropdownMenu>
             ) : (
               <Link
-                to="/auth"
+                to={localizedPath(i18n.language, "/auth")}
                 id="nav-signin-button"
                 className="neu-border neu-press bg-black px-3 py-1.5 font-mono text-xs font-bold uppercase text-cream hover:bg-cream hover:text-black dark:bg-cream dark:text-black dark:hover:bg-black dark:hover:text-cream"
                 style={{ letterSpacing: "0.08em" }}
               >
-                Sign in
+                {t("navbar.signin")}
               </Link>
             )}
           </div>
