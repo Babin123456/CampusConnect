@@ -13,6 +13,8 @@ import { closePool } from "./db";
 import { requestLoggingPlugin } from "./request-logging";
 import { openTelemetryPlugin, initializeBackendTracing } from "./tracing";
 
+import { createGraphQLSecurityPlugin } from "./security";
+
 // Initialize OpenTelemetry backend tracing provider on server startup
 initializeBackendTracing();
 
@@ -61,13 +63,16 @@ export const yoga = createYoga({
       }
     }
 
-    return { user };
+    return { user, request };
   },
-  plugins: [requestLoggingPlugin(), openTelemetryPlugin()],
+  plugins: [
+    requestLoggingPlugin(),
+    openTelemetryPlugin(),
+    createGraphQLSecurityPlugin({ maxDepth: 5, rateLimit: { maxMutations: 10, windowMs: 60000 } }),
+  ],
 });
 
-// Re-export for use by server-side event producers (mention handlers, etc.)
-export { pubsub, publishNotification };
+
 
 /**
  * Graceful shutdown: release all pooled Postgres connections when the
