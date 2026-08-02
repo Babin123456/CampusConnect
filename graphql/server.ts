@@ -1,4 +1,4 @@
-import { createSchema, createYoga } from "graphql-yoga";
+import { createSchema, createYoga, createGraphQLError, type Plugin } from "graphql-yoga";
 import {
   typeDefs,
   resolvers,
@@ -85,9 +85,11 @@ async function gracefulShutdown(signal: string) {
   if (isShuttingDown) return;
   isShuttingDown = true;
 
+  // eslint-disable-next-line no-console
   console.log(`[server] Received ${signal}, closing Postgres pool...`);
   try {
     await closePool();
+    // eslint-disable-next-line no-console
     console.log("[server] Postgres pool closed cleanly.");
   } catch (err) {
     console.error("[server] Error while closing Postgres pool:", err);
