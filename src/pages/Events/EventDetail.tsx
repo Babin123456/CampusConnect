@@ -12,6 +12,7 @@ import LazyHydrate from "@/components/LazyHydrate";
 import { User } from "@supabase/supabase-js";
 import { useEmailVerification } from "@/hooks/useEmailVerification";
 import { useBreadcrumbs } from "@/components/BreadcrumbsContext";
+import { triggerConfetti } from "@/utils/confetti";
 // Removed SiteShell import
 import { SkeletonEventDetails } from "@/components/events/SkeletonEventDetails";
 import { MapSkeleton } from "@/components/ui/MapSkeleton";
@@ -42,7 +43,7 @@ import { formatEventDateRange } from "@/lib/utils";
 import { loadDomMax } from "@/lib/motionFeatures";
 import { downloadIcs, getGoogleCalendarUrl } from "@/lib/calendarUtils";
 import { EventCapacityGauge } from "@/components/events/EventCapacityGauge";
-import { formatStandardDate } from "@/utils/dateUtils";
+import { formatDateLong } from "@/lib/dateFormatter";
 import { toast } from "sonner";
 import { ShareMenu } from "@/components/ui/ShareMenu";
 import {
@@ -195,8 +196,7 @@ function SimilarEvents({
             </h3>
             {evt.event_date && (
               <p className="font-mono text-xs text-black/60 mt-1">
-                📅 {formatStandardDate(evt.event_date)}
-                📅 {new Date(evt.event_date).toLocaleDateString()}
+                📅 {formatDateLong(evt.event_date)}
               </p>
             )}
           </Link>
@@ -214,7 +214,7 @@ function rsvpRowsToCsv(rows: { name: string; email: string; rsvp_date: string; s
   };
   const lines = [headers.join(",")];
   for (const r of rows) {
-    lines.push([r.name, r.email, formatStandardDate(r.rsvp_date), r.status].map(escape).join(","));
+    lines.push([r.name, r.email, formatDateLong(r.rsvp_date), r.status].map(escape).join(","));
   }
   return lines.join("\n");
 }
@@ -297,6 +297,28 @@ export default function EventDetailsPage() {
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
   }, [supabase]);
+
+  // Listen for Service Worker background sync messages for offline RSVP reconciliation
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === "OFFLINE_RSVP_SYNC_SUCCESS") {
+        toast.success("Your offline RSVP was synchronized successfully!");
+        refetch();
+      } else if (event.data?.type === "OFFLINE_RSVP_SYNC_ERROR") {
+        toast.error(
+          `Offline RSVP sync failed: ${event.data.reason || "Event capacity reached or conflict occurred."}`,
+        );
+        refetch(); // Refetch to reset optimistic UI to server ground truth
+      }
+    }
+
+    navigator.serviceWorker.addEventListener("message", handleSwMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener("message", handleSwMessage);
+    };
+  }, [refetch]);
 
   // Gallery States and Queries
   interface UploadingFile {
@@ -801,9 +823,12 @@ export default function EventDetailsPage() {
         toast.error((err?.message as string) || "Failed to update RSVP. Please try again.");
       }
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (_data, variables) => {
       // Refetch to ensure server state matches
       refetch();
+      if (!variables.hasRsvpd) {
+        triggerConfetti();
+      }
       // Reserve selected seats after successful RSVP
       if (hasSeats && selectedSeats.length > 0) {
         selectedSeats.forEach((seatId) => {
@@ -1217,7 +1242,9 @@ export default function EventDetailsPage() {
   const attendeeCount =
     ((event as Record<string, unknown>).attendee_count as number) ?? rsvps.length;
   const maxAttendees = (event as Record<string, unknown>).max_attendees as
-    number | null | undefined;
+    | number
+    | null
+    | undefined;
   const isAtCapacity =
     maxAttendees !== null &&
     maxAttendees !== undefined &&
