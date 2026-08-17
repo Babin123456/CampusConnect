@@ -14,6 +14,9 @@ import {
   CheckCircle,
   Download,
   BarChart2,
+  ShoppingBag,
+  Key,
+  Code,
 } from "lucide-react";
 import { PromoVideoUploader } from "@/components/PromoVideoUploader";
 import { ClubManageSkeleton } from "@/components/DashboardWidgetSkeleton";
@@ -22,6 +25,7 @@ import { ImageCropUpload } from "@/components/ImageCropUpload";
 import { ClubMembersTable } from "@/components/Clubs/ClubMembersTable";
 import { ClubRolesManager } from "@/components/Clubs/ClubRolesManager";
 import { ClubAnalyticsDashboard } from "@/components/Clubs/ClubAnalyticsDashboard";
+import { ManageMerch } from "@/components/Clubs/Merchandise/ManageMerch";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -57,7 +61,7 @@ export default function ClubManageRoute() {
   const [user, setUser] = useState<User | null>(null);
   const initialTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<
-    "settings" | "members" | "roles" | "events" | "analytics"
+    "settings" | "members" | "roles" | "events" | "analytics" | "merchandise" | "developer"
   >(
     initialTab === "analytics"
       ? "analytics"
@@ -67,7 +71,11 @@ export default function ClubManageRoute() {
           ? "roles"
           : initialTab === "events"
             ? "events"
-            : "settings",
+            : initialTab === "merchandise"
+              ? "merchandise"
+              : initialTab === "developer"
+                ? "developer"
+                : "settings",
   );
 
   // Form State
@@ -83,9 +91,114 @@ export default function ClubManageRoute() {
   const [promoVideoUrl, setPromoVideoUrl] = useState("");
   const [isConflictDialogOpen, setIsConflictDialogOpen] = useState(false);
   const [serverClub, setServerClub] = useState<Club | null>(null);
+
+  const [isGenerateDialogOpen, setIsGenerateDialogOpen] = useState(false);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [newKeySecret, setNewKeySecret] = useState("");
+
+  const { data: apiKeys = [], refetch: refetchApiKeys } = useQuery({
+    queryKey: ["club_api_keys", club?.id],
+    queryFn: async () => {
+      if (!club?.id) return [];
+      const { data, error } = await supabase
+        .from("club_api_keys")
+        .select("id, name, prefix, created_at, last_used_at")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!club?.id && activeTab === "developer",
+  });
+
+  const generateKeyMutation = useMutation({
+    mutationFn: async () => {
+      if (!club?.id || !newKeyName.trim()) return;
+
+      const rawSecret = Array.from(crypto.getRandomValues(new Uint8Array(24)))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      const prefixHex = Array.from(crypto.getRandomValues(new Uint8Array(4)))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      const prefix = `cc_${prefixHex}`;
+      const fullKey = `${prefix}.${rawSecret}`;
+
+      const { data: keyId, error } = await supabase.rpc("create_club_api_key", {
+        p_club_id: club.id,
+        p_name: newKeyName,
+        p_raw_key: rawSecret,
+        p_prefix: prefix,
+        p_expires_at: null,
+      });
+
+      if (error) throw error;
+      setNewKeySecret(fullKey);
+      refetchApiKeys();
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "Failed to generate API Key");
+    },
+  });
+
+  const revokeKeyMutation = useMutation({
+    mutationFn: async (keyId: string) => {
+      const { error } = await supabase.from("club_api_keys").delete().eq("id", keyId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("API key revoked successfully!");
+      refetchApiKeys();
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "Failed to revoke API Key");
+    },
+  });
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
   }, [supabase]);
+
+  const { data: googleIntegration, refetch: refetchGoogleIntegration } = useQuery({
+    queryKey: ["google_sheets_integration", club?.id],
+    queryFn: async () => {
+      if (!club?.id) return null;
+      const { data, error } = await supabase
+        .from("google_sheets_integrations")
+        .select("id, updated_at")
+        .eq("club_id", club.id)
+        .maybeSingle();
+      if (error && error.code !== "PGRST116") throw error;
+      return data;
+    },
+    enabled: !!club?.id,
+  });
+
+  const unlinkGoogleMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("google_sheets_integrations")
+        .delete()
+        .eq("club_id", club.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Google account unlinked successfully!");
+      refetchGoogleIntegration();
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to unlink Google account");
+    },
+  });
+
+  const handleLinkGoogle = () => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "mock-client-id";
+    const redirectUri = `${window.location.origin}/api/google/callback`;
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(
+      redirectUri
+    )}&response_type=code&scope=${encodeURIComponent(
+      "https://www.googleapis.com/auth/spreadsheets"
+    )}&access_type=offline&prompt=consent&state=${club.id}`;
+    window.location.href = authUrl;
+  };
 
   const {
     data: club,
@@ -374,6 +487,12 @@ export default function ClubManageRoute() {
                 <Calendar size={18} /> Events
               </button>
               <button
+                onClick={() => navigate(`/clubs/${slug}/scheduler`)}
+                className="neu-border flex items-center gap-3 p-4 font-mono text-sm font-bold uppercase transition-all bg-lime text-black hover:-translate-y-1 hover:shadow-lg"
+              >
+                <Calendar size={18} /> Smart Scheduler
+              </button>
+              <button
                 onClick={() => setActiveTab("analytics")}
                 className={`neu-border flex items-center gap-3 p-4 font-mono text-sm font-bold uppercase transition-all ${
                   activeTab === "analytics"
@@ -392,6 +511,26 @@ export default function ClubManageRoute() {
                 }`}
               >
                 <ShieldCheck size={18} /> Roles
+              </button>
+              <button
+                onClick={() => setActiveTab("merchandise")}
+                className={`neu-border flex items-center gap-3 p-4 font-mono text-sm font-bold uppercase transition-all ${
+                  activeTab === "merchandise"
+                    ? "bg-black text-white hover:-translate-y-1"
+                    : "bg-white text-black hover:bg-gray-50"
+                }`}
+              >
+                <ShoppingBag size={18} /> Merchandise
+              </button>
+              <button
+                onClick={() => setActiveTab("developer")}
+                className={`neu-border flex items-center gap-3 p-4 font-mono text-sm font-bold uppercase transition-all ${
+                  activeTab === "developer"
+                    ? "bg-black text-white hover:-translate-y-1"
+                    : "bg-white text-black hover:bg-gray-50"
+                }`}
+              >
+                <Key size={18} /> API Keys
               </button>
             </nav>
           </aside>
@@ -527,6 +666,48 @@ export default function ClubManageRoute() {
                     {updateClubMutation.isPending ? "Saving..." : "Save Settings"}
                   </button>
                 </form>
+
+                {/* Google Sheets Integration */}
+                <div className="neu-border bg-white p-6 mt-6 space-y-4">
+                  <h3 className="font-display text-xl font-bold uppercase">
+                    Google Sheets Integration 📊
+                  </h3>
+                  <p className="text-xs font-mono text-gray-500">
+                    Sync RSVP list data dynamically and in real-time directly to a linked Google Sheet.
+                  </p>
+
+                  {googleIntegration ? (
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border-2 border-dashed border-green-500 bg-green-50/50 gap-4">
+                      <div>
+                        <p className="font-mono text-xs font-bold text-green-700">
+                          Connected with Google Sheets ✅
+                        </p>
+                        <p className="font-mono text-[10px] text-gray-400 mt-1">
+                          Linked on {new Date(googleIntegration.updated_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => unlinkGoogleMutation.mutate()}
+                        disabled={unlinkGoogleMutation.isPending}
+                        className="neu-border bg-red-100 px-3 py-1.5 font-mono text-xs font-bold uppercase text-red-700 hover:bg-red-200 transition-colors"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border-2 border-black bg-gray-50 gap-4">
+                      <p className="font-mono text-xs text-gray-600">
+                        Link your Google Account to enable live real-time sheets syncing for events.
+                      </p>
+                      <button
+                        onClick={handleLinkGoogle}
+                        className="neu-border neu-press bg-[#a3e635] text-black px-4 py-2 font-mono text-xs font-bold uppercase"
+                      >
+                        Link Google Account
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -640,6 +821,160 @@ export default function ClubManageRoute() {
               </div>
             )}
             {activeTab === "analytics" && <ClubAnalyticsDashboard clubId={club.id} />}
+            {activeTab === "merchandise" && <ManageMerch clubId={club.id} />}
+            {activeTab === "developer" && (
+              <div className="neu-border bg-white p-6 space-y-6">
+                <div className="flex items-center justify-between border-b-2 border-black pb-2">
+                  <h2 className="font-display text-2xl font-bold">
+                    Secure API Key Management
+                  </h2>
+                  <button
+                    onClick={() => {
+                      setNewKeySecret("");
+                      setNewKeyName("");
+                      setIsGenerateDialogOpen(true);
+                    }}
+                    className="neu-border neu-press bg-[#a3e635] text-black px-4 py-2 font-mono text-xs font-bold uppercase"
+                  >
+                    Generate New Key
+                  </button>
+                </div>
+
+                <p className="text-sm font-mono text-gray-600">
+                  Allow your developer team or external scripts (like Discord bots) to securely fetch club details and upcoming events. Authenticate request endpoints using Bearer Authorization tokens.
+                </p>
+
+                {/* API Keys List */}
+                <div className="border-2 border-black bg-white shadow-[4px_4px_0_0_#000] overflow-x-auto">
+                  <table className="w-full text-left font-mono text-xs">
+                    <thead className="bg-black text-white uppercase font-bold border-b-2 border-black">
+                      <tr>
+                        <th className="p-3">Key Name</th>
+                        <th className="p-3">Prefix</th>
+                        <th className="p-3">Created At</th>
+                        <th className="p-3">Last Used At</th>
+                        <th className="p-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y-2 divide-black">
+                      {apiKeys.length > 0 ? (
+                        apiKeys.map((k: any) => (
+                          <tr key={k.id} className="hover:bg-gray-50">
+                            <td className="p-3 font-bold">{k.name}</td>
+                            <td className="p-3 font-semibold text-gray-600">{k.prefix}...</td>
+                            <td className="p-3">{new Date(k.created_at).toLocaleDateString()}</td>
+                            <td className="p-3">
+                              {k.last_used_at
+                                ? new Date(k.last_used_at).toLocaleDateString()
+                                : "Never"}
+                            </td>
+                            <td className="p-3 text-right">
+                              <button
+                                onClick={() => revokeKeyMutation.mutate(k.id)}
+                                className="border border-black bg-red-100 px-2.5 py-1 text-[10px] font-bold uppercase text-red-700 hover:bg-red-200 transition-colors"
+                              >
+                                Revoke
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="p-4 text-center text-gray-500 italic">
+                            No API Keys generated yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Generate Dialog */}
+                <AlertDialog open={isGenerateDialogOpen} onOpenChange={setIsGenerateDialogOpen}>
+                  <AlertDialogContent className="max-w-md border-4 border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-none">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="font-display text-lg font-black uppercase">
+                        Generate API Key
+                      </AlertDialogTitle>
+                      <AlertDialogDescription className="font-mono text-xs text-gray-600">
+                        Give this key a clear name so you can track its usage.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+
+                    {newKeySecret ? (
+                      <div className="space-y-4 my-2">
+                        <div className="border-2 border-dashed border-red-500 bg-red-50 p-3 font-mono text-xs text-red-700 font-bold uppercase">
+                          ⚠️ Copy this key now! It will not be shown again.
+                        </div>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={newKeySecret}
+                            className="w-full border-2 border-black p-2 font-mono text-xs bg-gray-50"
+                          />
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(newKeySecret);
+                              toast.success("API key copied to clipboard!");
+                            }}
+                            className="neu-border neu-press bg-yellow-200 px-3 py-2 font-mono text-xs font-bold uppercase"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 my-2">
+                        <div className="flex flex-col gap-1.5">
+                          <label className="font-mono text-xs font-bold uppercase">
+                            Key Name
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Discord Bot Key"
+                            value={newKeyName}
+                            onChange={(e) => setNewKeyName(e.target.value)}
+                            className="border-2 border-black p-2 font-mono text-xs focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <AlertDialogFooter className="mt-4">
+                      {newKeySecret ? (
+                        <button
+                          onClick={() => {
+                            setIsGenerateDialogOpen(false);
+                            setNewKeySecret("");
+                            setNewKeyName("");
+                          }}
+                          className="neu-border bg-black text-white px-4 py-2 font-mono text-xs font-bold uppercase"
+                        >
+                          Close
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => setIsGenerateDialogOpen(false)}
+                            className="border-2 border-black px-4 py-2 font-mono text-xs font-bold uppercase hover:bg-gray-50"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => generateKeyMutation.mutate()}
+                            disabled={generateKeyMutation.isPending || !newKeyName.trim()}
+                            className="neu-border neu-press bg-[#a3e635] text-black px-4 py-2 font-mono text-xs font-bold uppercase"
+                          >
+                            {generateKeyMutation.isPending ? "Generating..." : "Generate"}
+                          </button>
+                        </>
+                      )}
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            )}
           </main>
         </div>
       </div>

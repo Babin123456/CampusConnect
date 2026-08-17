@@ -134,6 +134,8 @@ import { CaptchaWidget } from "@/components/CaptchaWidget";
 import { Blurhash } from "react-blurhash";
 import { isValidBlurhash, DEFAULT_FALLBACK_BLURHASH } from "@/lib/blurhashUtils";
 import { EventDescriptionTranslation } from "@/components/events/EventDescriptionTranslation";
+import { LiveNowBadge } from "@/components/events/LiveNowBadge";
+import { isEventLive } from "@/lib/utils";
 
 /**
  * Hero banner for the event detail page.
@@ -1549,6 +1551,8 @@ export default function EventDetailsPage() {
     maxAttendees > 0 &&
     attendeeCount >= maxAttendees;
 
+  const isLive = isEventLive(event);
+
   return (
     <>
       <Helmet>
@@ -1637,10 +1641,11 @@ export default function EventDetailsPage() {
           )}
 
           <div className="relative mx-auto flex min-h-[50vh] max-w-4xl flex-col justify-end px-4 py-16 md:min-h-[60vh] md:px-6 md:py-24">
-            <div className="mb-4">
+            <div className="mb-4 flex flex-wrap items-center gap-3">
               <span className="neu-border inline-block bg-white px-3 py-1.5 font-mono text-xs font-bold uppercase tracking-wider text-black">
                 Event Details
               </span>
+              {isLive && <LiveNowBadge>Live Now</LiveNowBadge>}
             </div>
 
             <div className="flex items-center gap-3">
@@ -1649,8 +1654,7 @@ export default function EventDetailsPage() {
               >
                 {event.title}
               </h1>
-              <ShareMenu url={shareUrl} title={event.title} />
-              <TooltipProvider>
+<ShareMenu url={shareUrl} title={event.title} eventId={event.id} />              <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -2538,12 +2542,12 @@ export default function EventDetailsPage() {
                   Share with Friends
                 </h3>
                 <div className="mt-4">
-                  <ShareMenu
-                    url={shareUrl}
-                    title={event.title}
-                    text={`Check out this event: ${event.title}`}
-                  />
-                </div>
+<ShareMenu
+                url={shareUrl}
+                title={event.title}
+                text={`Check out this event: ${event.title}`}
+                eventId={event.id}
+              />                </div>
               </div>
 
               <div className="border-t border-black/10 pt-4">
@@ -2571,9 +2575,68 @@ export default function EventDetailsPage() {
                   </p>
                 )}
               </div>
-            </div>
 
-            <EventFaqSection eventId={event.id} isOrganizer={isOrganizer} userId={user?.id} />
+              {/* Event Live Support Reporting Card */}
+              <div className="border-t border-black/10 pt-4 space-y-3 text-black">
+                <h3 className="font-mono text-xs font-bold uppercase text-red-600">
+                  Event Live Support 🚨
+                </h3>
+                <p className="text-xs font-mono text-gray-500">
+                  Experiencing an issue during the event? Report it instantly to the organizers.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {["🎙️ Mic Broken", "❄️ Too Cold", "🔥 Too Hot", "🔊 Too Quiet"].map((label) => (
+                    <button
+                      key={label}
+                      onClick={async () => {
+                        const { error } = await supabase.from("event_live_tickets").insert({
+                          event_id: event.id,
+                          user_id: user?.id || null,
+                          message: label,
+                          status: "open",
+                        });
+                        if (error) {
+                          toast.error(error.message);
+                        } else {
+                          toast.success("Issue reported! Organizers have been notified.");
+                        }
+                      }}
+                      className="border border-black bg-white hover:bg-red-50 text-[10px] font-mono font-bold uppercase px-2 py-1 transition-colors"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Report another issue..."
+                    className="w-full border-2 border-black p-2 font-mono text-xs focus:outline-none"
+                    onKeyDown={async (e) => {
+                      if (e.key === "Enter") {
+                        const target = e.currentTarget;
+                        if (!target.value.trim()) return;
+                        const { error } = await supabase.from("event_live_tickets").insert({
+                          event_id: event.id,
+                          user_id: user?.id || null,
+                          message: target.value.trim(),
+                          status: "open",
+                        });
+                        if (error) {
+                          toast.error(error.message);
+                        } else {
+                          toast.success("Issue reported! Organizers have been notified.");
+                          target.value = "";
+                        }
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-black/10 pt-4">
+                <EventFaqSection eventId={event.id} isOrganizer={isOrganizer} userId={user?.id} />
+              </div>
             {/* Kanban Board for Organizer */}
             {isOrganizer && (
               <div className="mt-12 border-t-4 border-black pt-10">

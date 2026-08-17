@@ -16,10 +16,13 @@ import { getPresenceBadgeClass, usePresence } from "@/hooks/usePresence";
 import { ArrowLeft, Github, Loader2, CheckCircle, Flag } from "lucide-react";
 import { ReportDialog } from "@/components/ReportDialog";
 import { EmptyState } from "@/components/EmptyState";
+import { ConstitutionManager } from "@/components/Clubs/ConstitutionManager";
+import { Skeleton } from "@/components/ui/skeleton";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { AudioReactiveBackground } from "@/components/media/AudioReactiveBackground";
 import LazyHydrate from "@/components/LazyHydrate";
 import { NotFoundPage as NotFound } from "@/components/NotFoundPage";
+import { MerchStore } from "@/components/Clubs/Merchandise/MerchStore";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -463,6 +466,15 @@ export default function ClubProfile() {
               <ReactMarkdown components={mdComponents}>{club.description || ""}</ReactMarkdown>
             </div>
 
+            <div className="mt-8 max-w-2xl">
+              <ConstitutionManager
+                clubId={club.id}
+                isOrganizer={can("club.manage")}
+                currentVersion={club.bylaws_version || 0}
+                currentFileUrl={club.constitution_url || undefined}
+              />
+            </div>
+
             {club.promo_video_url && (
               <div className="mt-8 max-w-2xl">
                 <h3 className="font-display text-xl font-bold text-indigo-900 uppercase tracking-tight">
@@ -726,6 +738,16 @@ export default function ClubProfile() {
             </div>
           </div>
         </section>
+
+        <section className="px-4 py-12 md:px-6 bg-gray-50 border-t-2 border-black">
+          <div className="mx-auto max-w-6xl">
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-3xl font-display font-bold text-black">Merchandise Store</h2>
+            </div>
+            <MerchStore clubId={club.id} />
+          </div>
+        </section>
+
         <ReportDialog
           isOpen={isReportDialogOpen}
           onClose={() => setIsReportDialogOpen(false)}

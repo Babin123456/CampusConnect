@@ -3,6 +3,32 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type Database = {
   public: {
     Tables: {
+      club_documents: {
+        Row: {
+          id: string;
+          club_id: string;
+          file_url: string;
+          version_number: number;
+          uploaded_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          club_id: string;
+          file_url: string;
+          version_number: number;
+          uploaded_by: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          club_id?: string;
+          file_url?: string;
+          version_number?: number;
+          uploaded_by?: string;
+          created_at?: string;
+        };
+      };
       clubs: {
         Row: {
           id: string;
@@ -144,6 +170,79 @@ export type Database = {
         };
         Relationships: [];
       };
+      merch_items: {
+        Row: {
+          id: string;
+          club_id: string;
+          name: string;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          club_id: string;
+          name: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          club_id?: string;
+          name?: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "merch_items_club_id_fkey";
+            columns: ["club_id"];
+            isOneToOne: false;
+            referencedRelation: "clubs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      merch_variants: {
+        Row: {
+          id: string;
+          merch_item_id: string;
+          name: string;
+          stock: number;
+          price: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          merch_item_id: string;
+          name: string;
+          stock?: number;
+          price?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          merch_item_id?: string;
+          name?: string;
+          stock?: number;
+          price?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "merch_variants_merch_item_id_fkey";
+            columns: ["merch_item_id"];
+            isOneToOne: false;
+            referencedRelation: "merch_items";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       club_tags: {
         Row: {
           id: string;
@@ -257,6 +356,7 @@ export type Database = {
           linkedin_url: string | null;
           role: "student" | "admin" | "faculty" | "owner" | "system_admin";
           skills: string[] | null;
+          course_codes: string[];
           notification_preferences: Json | null;
           is_banned: boolean;
           strike_count: number;
@@ -278,6 +378,7 @@ export type Database = {
           linkedin_url?: string | null;
           role?: "student" | "admin" | "faculty" | "owner" | "system_admin";
           skills?: string[] | null;
+          course_codes?: string[];
           notification_preferences?: Json | null;
           is_banned?: boolean;
           strike_count?: number;
@@ -299,12 +400,52 @@ export type Database = {
           linkedin_url?: string | null;
           role?: "student" | "admin" | "faculty" | "owner" | "system_admin";
           skills?: string[] | null;
+          course_codes?: string[];
           notification_preferences?: Json | null;
           is_banned?: boolean;
           strike_count?: number;
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
+      };
+      micro_events: {
+        Row: {
+          id: string;
+          user_id: string;
+          course_code: string;
+          location: string;
+          max_capacity: number;
+          created_at: string;
+          expires_at: string;
+          archived_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          course_code: string;
+          location: string;
+          max_capacity?: number;
+          created_at?: string;
+          expires_at?: string;
+          archived_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          course_code?: string;
+          location?: string;
+          max_capacity?: number;
+          created_at?: string;
+          expires_at?: string;
+          archived_at?: string | null;
+        };
+        Relationships: [];
+      };
+      micro_event_participants: {
+        Row: { micro_event_id: string; user_id: string; joined_at: string };
+        Insert: { micro_event_id: string; user_id: string; joined_at?: string };
+        Update: { micro_event_id?: string; user_id?: string; joined_at?: string };
         Relationships: [];
       };
       user_preferences: {
@@ -432,6 +573,29 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      event_announcements: {
+        Row: {
+          id: string;
+          event_id: string;
+          message: string;
+          priority: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          event_id: string;
+          message: string;
+          priority?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          event_id?: string;
+          message?: string;
+          priority?: string;
+          created_at?: string;
+        };
       };
       events: {
         Row: {
@@ -1383,7 +1547,8 @@ export type Database = {
           actor_id: string | null;
           type: string;
           title: string;
-          message: string;
+          message?: string | null;
+          payload?: Record<string, any> | null;
           link: string | null;
           link_url: string | null;
 
@@ -1398,7 +1563,8 @@ export type Database = {
           actor_id?: string | null;
           type: string;
           title: string;
-          message: string;
+          message?: string | null;
+          payload?: Record<string, any> | null;
           link?: string | null;
           link_url?: string | null;
 
@@ -1413,7 +1579,8 @@ export type Database = {
           actor_id?: string | null;
           type?: string;
           title?: string;
-          message?: string;
+          message?: string | null;
+          payload?: Record<string, any> | null;
           link?: string | null;
           link_url?: string | null;
 
@@ -1813,6 +1980,41 @@ export type Database = {
         };
         Relationships: [];
       };
+      user_availability: {
+        Row: {
+          user_id: string;
+          day_of_week: number;
+          slot_index: number;
+          is_available: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          day_of_week: number;
+          slot_index: number;
+          is_available?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          day_of_week?: number;
+          slot_index?: number;
+          is_available?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "user_availability_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       push_subscriptions: {
         Row: {
           id: string;
@@ -2092,6 +2294,14 @@ export type Database = {
         };
         Returns: Json;
       };
+      create_micro_event: {
+        Args: { p_course_code: string; p_location: string; p_max_capacity?: number };
+        Returns: Json;
+      };
+      join_micro_event: { Args: { p_micro_event_id: string }; Returns: undefined };
+      leave_micro_event: { Args: { p_micro_event_id: string }; Returns: undefined };
+      archive_micro_event: { Args: { p_micro_event_id: string }; Returns: undefined };
+      get_matching_micro_events: { Args: Record<string, never>; Returns: Json };
       get_event_analytics: {
         Args: {
           p_event_id: string;

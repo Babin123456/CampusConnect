@@ -14,7 +14,7 @@ import { createClient } from "@/lib/supabase/client";
 
 import { OptimizedImage } from "@/components/media/OptimizedImage";
 import { Switch } from "@/components/ui/switch";
-import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 
 import type { User } from "@supabase/supabase-js";
 import { useQuery } from "@/hooks/useReactQueryReplacement";
@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/form";
 import { ImageCropUpload } from "@/components/ImageCropUpload";
 import { AutoTaggingSettings } from "@/components/AutoTaggingSettings";
+import { useTheme } from "@/components/theme-provider";
 
 const FONT_SIZE_KEY = "campusconnect-font-size";
 
@@ -98,12 +99,19 @@ export default function SettingsPage() {
   const [borderThickness, setBorderThickness] = useState(4);
   const [borderRadius, setBorderRadius] = useState(8);
   const [isThemeDrawerOpen, setIsThemeDrawerOpen] = useState(false);
+  const [timezone, setTimezone] = useState("UTC");
+  const [quietHoursStart, setQuietHoursStart] = useState("22:00");
+  const [quietHoursEnd, setQuietHoursEnd] = useState("07:00");
+  const [isSavingPrefs, setIsSavingPrefs] = useState(false);
   const { fontSize, increment, decrement, reset } = useFontSize();
 
   // --- Skills tags state ---
   const [skills, setSkills] = useState<string[]>([]);
   const [skillInput, setSkillInput] = useState("");
   const skillInputRef = useRef<HTMLInputElement>(null);
+  const [courseCodes, setCourseCodes] = useState<string[]>([]);
+  const [courseCodeInput, setCourseCodeInput] = useState("");
+  const courseCodeInputRef = useRef<HTMLInputElement>(null);
 
   const handleAddSkill = () => {
     const trimmed = skillInput.trim();
@@ -125,8 +133,28 @@ export default function SettingsPage() {
     setSkills((prev) => prev.filter((s) => s !== skill));
   };
 
+  const handleAddCourseCode = () => {
+    const normalized = courseCodeInput.trim().replace(/\s+/g, " ").toUpperCase();
+    if (normalized && !courseCodes.includes(normalized))
+      setCourseCodes((prev) => [...prev, normalized]);
+    setCourseCodeInput("");
+    courseCodeInputRef.current?.focus();
+  };
+
+  const handleCourseCodeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAddCourseCode();
+    }
+  };
+
+  const handleRemoveCourseCode = (courseCode: string) => {
+    setCourseCodes((prev) => prev.filter((code) => code !== courseCode));
+  };
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
+      console.log("SETTINGS_GET_USER_RESOLVED:", user);
       if (!user) {
         navigate("/auth", { replace: true });
       } else {
@@ -152,20 +180,21 @@ export default function SettingsPage() {
     }
   }, [navigate, supabase]);
 
-  const {
-    data: profile,
-    isLoading: isProfileLoading,
-    refetch,
-  } = useQuery({
+  const profileQuery = useQuery({
     queryKey: ["profile", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user?.id)
-        .single();
-      if (error) throw error;
-      return data;
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user?.id)
+          .single();
+        if (error) throw error;
+        return data;
+      } catch (err) {
+        console.error("PROFILE_QUERY_ERROR:", err);
+        throw err;
+      }
     },
     enabled: !!user?.id,
   });
@@ -173,10 +202,7 @@ export default function SettingsPage() {
   const [birthDate, setBirthDate] = useState("");
   const [shareBirthday, setShareBirthday] = useState(false);
 
-  const {
-    data: privateDetails,
-    refetch: refetchPrivateDetails,
-  } = useQuery({
+  const { data: privateDetails, refetch: refetchPrivateDetails } = useQuery({
     queryKey: ["user_private_details", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -190,12 +216,69 @@ export default function SettingsPage() {
     enabled: !!user?.id,
   });
 
+  const profile = profileQuery.data;
+  const isProfileLoading = profileQuery.isLoading;
+  const refetch = profileQuery.refetch;
+
+  const { data: userPrefs, refetch: refetchPrefs } = useQuery({
+    queryKey: ["user_preferences", user?.id],
+    queryFn: async () => {
+      try {
+        const { data, error } = await supabase
+          .from("user_preferences")
+          .select("*")
+          .eq("user_id", user?.id)
+          .maybeSingle();
+        if (error) throw error;
+        return data;
+      } catch (err) {
+        console.error("PREFS_QUERY_ERROR:", err);
+        throw err;
+      }
+    },
+    enabled: !!user?.id,
+  });
+
   useEffect(() => {
     if (privateDetails) {
       setBirthDate(privateDetails.birth_date || "");
       setShareBirthday(privateDetails.share_birthday || false);
     }
   }, [privateDetails]);
+
+  useEffect(() => {
+    if (userPrefs) {
+      setTimezone(userPrefs.timezone || "UTC");
+      if (userPrefs.quiet_hours_start) {
+        setQuietHoursStart(userPrefs.quiet_hours_start.substring(0, 5));
+      }
+      if (userPrefs.quiet_hours_end) {
+        setQuietHoursEnd(userPrefs.quiet_hours_end.substring(0, 5));
+      }
+    }
+  }, [userPrefs]);
+
+  const handleSavePrefs = async () => {
+    if (!user) return;
+    setIsSavingPrefs(true);
+    try {
+      const { error } = await supabase.from("user_preferences").upsert({
+        user_id: user.id,
+        timezone,
+        quiet_hours_start: quietHoursStart ? `${quietHoursStart}:00` : null,
+        quiet_hours_end: quietHoursEnd ? `${quietHoursEnd}:00` : null,
+      });
+
+      if (error) throw error;
+      toast.success("Notification preferences saved successfully.");
+      refetchPrefs();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to save preferences.");
+    } finally {
+      setIsSavingPrefs(false);
+    }
+  };
 
   interface UserBadge {
     id: string;
@@ -216,7 +299,6 @@ export default function SettingsPage() {
     },
     enabled: !!user?.id,
   });
-
 
   const handleAlumniTransition = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -395,6 +477,11 @@ export default function SettingsPage() {
       if (Array.isArray(profile?.skills)) {
         setSkills(profile.skills as string[]);
       }
+      if (Array.isArray(profile?.course_codes)) {
+        setCourseCodes(
+          (profile.course_codes as string[]).map((courseCode) => courseCode.toUpperCase()),
+        );
+      }
     }
   }, [profile, user, form]);
 
@@ -511,6 +598,11 @@ export default function SettingsPage() {
         linkedin_url: values.linkedinUrl || null,
         phone_number: values.phoneNumber || null,
         skills: dedupedSkills,
+        course_codes: [
+          ...new Set(
+            courseCodes.map((courseCode) => courseCode.trim().toUpperCase()).filter(Boolean),
+          ),
+        ],
       };
 
       const safeData = ProfileUpdateAllowlistSchema.parse(rawPayload);
@@ -590,6 +682,14 @@ export default function SettingsPage() {
 
   const pStats = profile as Record<string, any> | null;
 
+  console.log("PROFILE_QUERY_STATE:", {
+    status: profileQuery.status,
+    fetchStatus: profileQuery.fetchStatus,
+    isLoading: isProfileLoading,
+    data: profile,
+    error: profileQuery.error,
+  });
+
   if (isProfileLoading && !profile) {
     return (
       <SiteShell>
@@ -645,6 +745,8 @@ export default function SettingsPage() {
           {/* ------------------------------- */}
           <Panel title="Profile">
             <AvatarUpload name={currentFullName || "User"} avatarTheme={currentAvatarTheme} />
+
+            <BannerUpload />
 
             <AvatarThemePicker
               selected={currentAvatarTheme}
@@ -923,6 +1025,51 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
+                <div className="space-y-2 border-t-2 border-black pt-5">
+                  <p className="eyebrow font-bold text-black">Courses for study matching</p>
+                  <p className="font-mono text-xs text-muted-foreground">
+                    Add exact course codes to see matching study tables in your Feed.
+                  </p>
+                  {courseCodes.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {courseCodes.map((courseCode) => (
+                        <span
+                          key={courseCode}
+                          className="neu-border inline-flex items-center gap-1 bg-[#bae6fd] px-2.5 py-1 font-mono text-xs font-bold"
+                        >
+                          {courseCode}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCourseCode(courseCode)}
+                            aria-label={`Remove course code ${courseCode}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={courseCodeInputRef}
+                      value={courseCodeInput}
+                      onChange={(e) => setCourseCodeInput(e.target.value)}
+                      onKeyDown={handleCourseCodeKeyDown}
+                      placeholder="e.g. CALC 101"
+                      maxLength={32}
+                      className="flex-1 border-0 border-b-2 border-black bg-transparent px-1 py-2 font-mono text-sm uppercase outline-none focus:bg-lime/40"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCourseCode}
+                      aria-label="Add course code"
+                      className="neu-border bg-black p-2 text-cream"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
                 <div className="flex justify-end pt-4">
                   <button
                     type="submit"
@@ -1020,6 +1167,60 @@ export default function SettingsPage() {
             <Toggle label="Email me about upcoming RSVPs" defaultChecked />
             <Toggle label="Weekly digest of club activity" defaultChecked />
             <Toggle label="New certificates" />
+
+            <div className="mt-6 border-t-2 border-black pt-6 space-y-4 text-black">
+              <h3 className="font-bold uppercase text-black">Quiet Hours & Timezone</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="timezone" className="font-mono text-xs font-bold uppercase">
+                    Timezone
+                  </label>
+                  <select
+                    id="timezone"
+                    value={timezone}
+                    onChange={(e) => setTimezone(e.target.value)}
+                    className="w-full border-2 border-black bg-white px-3 py-2 font-mono text-sm outline-none focus:bg-lime/20"
+                  >
+                    <option value="UTC">UTC</option>
+                    <option value="America/New_York">America/New_York</option>
+                    <option value="Asia/Kolkata">Asia/Kolkata</option>
+                    <option value="Europe/London">Europe/London</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="quiet-start" className="font-mono text-xs font-bold uppercase">
+                    Quiet Start
+                  </label>
+                  <input
+                    id="quiet-start"
+                    type="time"
+                    value={quietHoursStart}
+                    onChange={(e) => setQuietHoursStart(e.target.value)}
+                    className="w-full border-2 border-black bg-white px-3 py-2 font-mono text-sm outline-none focus:bg-lime/20"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="quiet-end" className="font-mono text-xs font-bold uppercase">
+                    Quiet End
+                  </label>
+                  <input
+                    id="quiet-end"
+                    type="time"
+                    value={quietHoursEnd}
+                    onChange={(e) => setQuietHoursEnd(e.target.value)}
+                    className="w-full border-2 border-black bg-white px-3 py-2 font-mono text-sm outline-none focus:bg-lime/20"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleSavePrefs}
+                disabled={isSavingPrefs}
+                className="neu-border neu-press bg-black px-4 py-2 font-mono text-xs font-bold uppercase text-cream disabled:opacity-50"
+              >
+                {isSavingPrefs ? "Saving..." : "Save Notification Preferences"}
+              </button>
+            </div>
           </Panel>
 
           <Panel title="Auto-Tagging (Facial Recognition)">
@@ -1029,9 +1230,11 @@ export default function SettingsPage() {
           <Panel title="Birthday Settings (Privacy Controls)">
             <div className="space-y-4">
               <p className="font-mono text-xs text-muted-foreground">
-                If you opt-in, we will notify your Club Executives 3 days before your birthday, and optionally post a celebratory shoutout to the club forum. Your birthday is kept strictly private otherwise.
+                If you opt-in, we will notify your Club Executives 3 days before your birthday, and
+                optionally post a celebratory shoutout to the club forum. Your birthday is kept
+                strictly private otherwise.
               </p>
-              
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
                   <label className="eyebrow font-bold text-black">Birth Date</label>
@@ -1046,12 +1249,11 @@ export default function SettingsPage() {
                 <div className="flex items-center justify-between gap-4 pt-4 sm:pt-6">
                   <div>
                     <label className="eyebrow font-bold text-black">Opt-In to Share</label>
-                    <p className="font-mono text-xs text-muted-foreground">Share birthday with Club Executives</p>
+                    <p className="font-mono text-xs text-muted-foreground">
+                      Share birthday with Club Executives
+                    </p>
                   </div>
-                  <Switch
-                    checked={shareBirthday}
-                    onCheckedChange={setShareBirthday}
-                  />
+                  <Switch checked={shareBirthday} onCheckedChange={setShareBirthday} />
                 </div>
               </div>
 
@@ -1061,13 +1263,11 @@ export default function SettingsPage() {
                   onClick={async () => {
                     try {
                       if (!user) return;
-                      const { error } = await supabase
-                        .from("user_private_details")
-                        .upsert({
-                          user_id: user.id,
-                          birth_date: birthDate ? birthDate : null,
-                          share_birthday: shareBirthday,
-                        });
+                      const { error } = await supabase.from("user_private_details").upsert({
+                        user_id: user.id,
+                        birth_date: birthDate ? birthDate : null,
+                        share_birthday: shareBirthday,
+                      });
                       if (error) throw error;
                       toast.success("Birthday privacy settings saved!");
                       refetchPrivateDetails();
@@ -1088,7 +1288,8 @@ export default function SettingsPage() {
               <div>
                 <h3 className="font-bold text-black uppercase mb-1">Data Portability & Deletion</h3>
                 <p className="font-mono text-xs text-muted-foreground mb-4">
-                  Manage your data, request exports of your personal information, or permanently delete your account and all associated data.
+                  Manage your data, request exports of your personal information, or permanently
+                  delete your account and all associated data.
                 </p>
                 <Link
                   to="/settings/data"
@@ -1463,6 +1664,142 @@ function AvatarUpload({ name, avatarTheme }: { name: string; avatarTheme?: Avata
     </div>
   );
 }
+function BannerUpload() {
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
+  const [preview, setPreview] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadBanner() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("banner_url")
+        .eq("id", user.id)
+        .single();
+
+      if (isMounted && !error && data?.banner_url) {
+        setPreview(data.banner_url);
+        setImageError(false);
+      }
+    }
+
+    loadBanner();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [supabase]);
+
+  async function handleUploaded(url: string) {
+    setPreview(url);
+    setImageError(false);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ banner_url: url })
+      .eq("id", user.id);
+
+    if (updateError) {
+      console.error(updateError);
+      toast.error("Failed to save profile banner.");
+    }
+  }
+
+  async function handleRemove() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    setRemoving(true);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ banner_url: null })
+        .eq("id", user.id);
+      if (error) throw error;
+      setPreview(null);
+      setImageError(false);
+      toast.success("Banner removed.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to remove banner.");
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4 border-b-2 border-black pb-6">
+      <div>
+        <p className="eyebrow font-bold text-black">Profile banner</p>
+        <p className="font-mono text-xs text-muted-foreground">
+          A wide header image shown behind your avatar. Cropped to 3:1 and compressed automatically
+          before upload.
+        </p>
+      </div>
+
+      {preview && !imageError && (
+        <div className="relative w-full overflow-hidden border-2 border-black">
+          <OptimizedImage
+            src={preview}
+            alt="Profile banner preview"
+            className="w-full"
+            width={1500}
+            height={500}
+            quality={80}
+            responsiveWidths={[600, 1200, 1500]}
+            sizes="(max-width: 768px) 100vw, 896px"
+            onError={() => setImageError(true)}
+            fallback={<div className="h-32 w-full bg-gray-200" aria-hidden="true" />}
+          />
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex-1 min-w-[240px]">
+          <ImageCropUpload
+            aspect={3}
+            bucket="profile-banners"
+            value={preview ?? undefined}
+            onUploaded={handleUploaded}
+            accept="image/jpeg,image/png,image/webp"
+            maxSizeBytes={5 * 1024 * 1024}
+            maxWidth={1500}
+            label="profile banner"
+            hint="JPG, PNG or WEBP · Max 5 MB · Wide 3:1 images look best"
+          />
+        </div>
+
+        {preview && !imageError && (
+          <button
+            type="button"
+            onClick={handleRemove}
+            disabled={removing}
+            className="neu-border bg-red-100 px-4 py-2 font-mono text-xs font-bold uppercase text-red-700 hover:bg-red-200 disabled:opacity-50"
+          >
+            {removing ? "Removing..." : "Remove banner"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ThemeToggle({
   theme,
   setTheme,

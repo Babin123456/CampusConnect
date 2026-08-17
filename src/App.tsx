@@ -27,7 +27,7 @@ import { RouteSkeleton } from "./components/RouteSkeleton";
 import { BreadcrumbProvider } from "@/components/BreadcrumbsContext";
 import AriaAnnouncer from "@/components/accessibility/AriaAnnouncer";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
-import { LoginRecoveryModal } from "@/components/auth/LoginRecoveryModal";
+import { EmergencyBroadcastOverlay } from "@/components/EmergencyBroadcastOverlay";import { LoginRecoveryModal } from "@/components/auth/LoginRecoveryModal";
 import { MfaChallengeGuard } from "@/components/auth/MfaChallengeGuard";
 import { ComplianceCheckGuard } from "@/components/auth/ComplianceCheckGuard";
 import UnsubscribeRoute from "./routes/unsubscribe";
@@ -98,6 +98,9 @@ const ClubNotesRoute = lazy(() => import("./routes/clubs.$slug.notes"));
 const ClubArticlesRoute = lazy(() => import("./routes/clubs.$slug.articles"));
 const ClubArticleDetailsRoute = lazy(() => import("./routes/clubs.$slug.articles.$articleId"));
 const ClubVaultRoute = lazy(() => import("./routes/clubs.$slug.vault"));
+const ScavengerHuntsList = lazy(() => import("./routes/scavenger-hunts"));
+const ScavengerHuntGame = lazy(() => import("./routes/scavenger-hunts.$id"));
+const ExploreShowcase = lazy(() => import("./routes/explore"));
 const ClubsLayout = lazy(() => import("./routes/clubs"));
 const ClubDiscoveryQuiz = lazy(() => import("./routes/clubs.fit"));
 const Dashboard = lazy(() => import("./routes/dashboard"));
@@ -122,7 +125,8 @@ const AdminReportsPage = lazy(() => import("./routes/admin.reports"));
 const AdminUsersPage = lazy(() => import("./routes/admin.users"));
 const AdminRestorePage = lazy(() => import("./routes/admin.restore"));
 const AdminDlqPage = lazy(() => import("./routes/admin.dlq"));
-const NotFound = lazy(() => import("./routes/NotFound"));
+const AdminEmergencyBroadcast = lazy(() => import("./routes/admin.emergency-broadcast"));const AdminBadgesPage = lazy(() => import("./routes/admin.badges"));const NotFound = lazy(() => import("./routes/NotFound"));
+const AdminBadgesPage = lazy(() => import("./routes/admin.badges"));const NotFound = lazy(() => import("./routes/NotFound"));
 const ChallengeArena = lazy(() => import("./routes/challenge"));
 const EventDashboard = lazy(() => import("./routes/events.$eventId.dashboard"));
 const EventGantt = lazy(() => import("./routes/events.$eventId.gantt"));
@@ -134,6 +138,7 @@ const Recap = lazy(() => import("./routes/recap"));
 const NetworkPage = lazy(() => import("@/pages/NetworkPage"));
 const ReviveClubPage = lazy(() => import("@/pages/ReviveClub"));
 const AdminRevivalRequestsPage = lazy(() => import("@/pages/Admin/AdminRevivalRequests"));
+const AdminLeadershipApprovals = lazy(() => import("./routes/admin.leadership-approvals"));
 const MfaChallenge = lazy(() => import("./routes/mfa-challenge"));
 const ComplianceCheck = lazy(() => import("./routes/compliance-check"));
 const VolunteerRecord = lazy(() => import("./routes/volunteer-record"));
@@ -209,6 +214,9 @@ const router = createBrowserRouter(
           <Route path="/bundles/:bundleId/checkout" element={<BundleCheckoutRoute />} />
           <Route path="/referrals/dashboard" element={<ReferralDashboardRoute />} />
           <Route path="/referrals/leaderboard" element={<ReferralLeaderboardRoute />} />
+          <Route path="/scavenger-hunts" element={<ScavengerHuntsList />} />
+          <Route path="/scavenger-hunts/:id" element={<ScavengerHuntGame />} />
+          <Route path="/explore" element={<ExploreShowcase />} />
           <Route path="/dashboard" element={<Dashboard />}>
             <Route index element={<DashboardOverview />} />
             <Route path="rsvps" element={<DashboardRsvps />} />
@@ -317,8 +325,9 @@ const router = createBrowserRouter(
             <Route path="/admin/reports" element={<AdminReportsPage />} />
             <Route path="/admin/users" element={<AdminUsersPage />} />
             <Route path="/admin/restore" element={<AdminRestorePage />} />
-            <Route path="/admin/dlq" element={<AdminDlqPage />} />
-            <Route path="/unsubscribe" element={<UnsubscribeRoute />} />
+<Route path="/admin/dlq" element={<AdminDlqPage />} />
+<Route path="/admin/emergency-broadcast" element={<AdminEmergencyBroadcast />} />            <Route path="/admin/badges" element={<AdminBadgesPage />} />            <Route path="/unsubscribe" element={<UnsubscribeRoute />} />
+            <Route path="/admin/badges" element={<AdminBadgesPage />} />            <Route path="/unsubscribe" element={<UnsubscribeRoute />} />
             {/* Catch-all route for 404 errors */}
             <Route path="*" element={<NotFound />} />
           </Route>
@@ -359,6 +368,7 @@ const router = createBrowserRouter(
           <Route path="/admin/users" element={<AdminUsersPage />} />
           <Route path="/admin/restore" element={<AdminRestorePage />} />
           <Route path="/admin/dlq" element={<AdminDlqPage />} />
+          <Route path="/admin/leadership-approvals" element={<AdminLeadershipApprovals />} />
           <Route path="/unsubscribe" element={<UnsubscribeRoute />} />
           {/* Catch-all route for 404 errors */}
           <Route path="*" element={<NotFound />} />
@@ -497,9 +507,9 @@ export default function App() {
             */}
             <LazyMotion features={loadDomAnimation} strict={import.meta.env.DEV}>
               <CommandPaletteProvider>
-                <OfflineIndicator />
-                <LoginRecoveryModal />
-                {/* Floating Dark Mode Toggle */}
+<OfflineIndicator />
+<EmergencyBroadcastOverlay />
+<LoginRecoveryModal />                {/* Floating Dark Mode Toggle */}
                 <div className="fixed bottom-4 right-4 z-[9999]">
                   <ThemeToggle />
                 </div>
